@@ -1,0 +1,107 @@
+---
+title: "Weight Lifting Machine Learning"
+author: "Nikhil Gupta"
+date: "7/6/2017"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Summary
+
+Objective of this anaysis is to predict the manner in which participant is exercising by assigning a classe variable to it. There are six partipants & five classes. Also, there are four measurements being taken from accelerometers on the belt, forearm, arm, & dumbbell. This entire analysis has been done in the following sequence:
+
+1. Reading the csv file & filtering out the relevant predictors for the study
+2. Partitioning the entire data in training & test data
+3. Applying the K-Fold cross validation to each of the ensembling algorithm
+4. Choosing different training methods(Single Decision Tree, Bagging, Random Forest, Generalized Additive Modelling) to find out the best accuracy model
+5. Predicting the values of testing data with the arrived model using predictors values & attmepting final testing with the validation data(testing file)
+
+#First Step: 
+Reading csv file. Eliminating the variables having NA & blank values. Then, choosing variables representing total acceleration on belt, forearm, arm & dumbbell. Below mentioned is the header of main data frame to be analyzed.
+
+```{r, echo=FALSE}
+main_file=read.csv("pml-training.csv")
+main_file=main_file[,colSums(is.na(main_file))<100]
+main_file=main_file[,colSums(main_file == "")<100]
+main_file=main_file[,c(2,11,24,37,50,60)]
+head(main_file)
+```
+
+#Second Step: 
+Loading suitable libraries. Also, partitioning data into training & test set in the ratio of 0.75 using Data Partition fucntion.
+
+```{r, echo=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+inTrain <- createDataPartition(y = main_file$classe, p = .75, list = FALSE) 
+training <- main_file[inTrain,]
+testing <- main_file[-inTrain,]
+```
+
+#Third Step: 
+Using rpart to predict using decision tree. Plot the decision tree & evaluate the accuracy of the predictions made by it.
+```{r}
+fit <- rpart(training$classe ~.,method="class", data=training)
+rpart.plot::prp(fit)
+predict_values_training=predict(fit, training,type = "class")
+accuracy_training = sum(predict_values_training == training$classe)/length(predict_values_training)
+
+predict_values_testing=predict(fit, testing,type = "class")
+accuracy_testing = sum(predict_values_testing == testing$classe)/length(predict_values_testing)
+cat("Accuracy in the testing data","\n")
+print(accuracy_testing)
+
+```
+
+#Fourth Step: 
+Random forest predicion by incorporating 10 fold cross validation in the train function without any pre-processing of data.Exhibit the confusion matrix & evaluate the accuracy of the predictions made by it.
+
+```{r, echo=FALSE}
+control <- trainControl(method="cv", number=10)
+rf_random <- train(classe~., data=training, method="rf", trControl=control)
+predict_values=predict(rf_random, testing)
+confusionMatrix(predict_values, testing$classe)
+```
+```{r, echo=FALSE}
+cat("\n")
+print(rf_random$finalModel)
+cat("\n")
+```
+
+#Fifth Step: 
+Bagging emsembling method was attempted in the train function without any pre-processing of data.Exhibiting the results & evaluating the accuracy of the predictions made by it.
+
+```{r, echo=FALSE}
+bagControl = bagControl(fit = ldaBag$fit, predict = ldaBag$pred,aggregate = ldaBag$aggregate)
+fit_bagging <- train(classe~., data=training, method="bag", B=10, bagControl=bagControl)
+predict_values=predict(fit_bagging,testing,type="raw",aggregation = "majority")
+confusionMatrix(predict_values, testing$classe)
+
+```
+
+#Sixth Step: 
+Predictive modelling using Generalized Addtive Models(GAM) method was attempted in the train function without any pre-processing of data.Exhibiting the results & evaluating the accuracy of the predictions made by it.
+
+```{r, echo=FALSE}
+library(gam)
+#Random forest prediciton
+predict_values_rf=predict(rf_random, training)
+
+#Bagging Prediction
+predict_values_bagging=predict(fit_bagging,training,type="raw",aggregation = "majority")
+
+#Combining predictors(RF+Bagging)
+pred_RFBag=data.frame(training$classe,predict_values_bagging,predict_values_rf)
+comb_RF=train(training.classe~.,data=pred_RFBag,methood="gam")
+predict_values_comb=predict(comb_RF,pred_RFBag)
+confusionMatrix(predict_values_comb, pred_RFBag$training.classe)
+```
+
+## Conclusions
+
+In the analysis, it is observed that accuracy of GAM Modelling is highest(91.3%) -> Made by the combination of predictors (Random Forest & Bagging) as compared to individual predictors as evident in the confusion matrices.
+
+
